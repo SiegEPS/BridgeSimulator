@@ -18,7 +18,8 @@ class BridgeHandGenerator:
                        hand_shape: Dict[str, List[int]] = None,
                        hand_losers: Dict[str, Tuple[int, int]] = None,
                        controls: Dict[str, Tuple[int, int]] = None,
-                       predeal: Dict[str, str] = None
+                       predeal: Dict[str, str] = None,
+                       max_attempts_param: int = None
                        ) -> List[Dict[str, Dict[str, List[str]]]]:
         """
         Generate multiple bridge hands using redeal's simulation capabilities,
@@ -96,56 +97,18 @@ class BridgeHandGenerator:
                 for player, (min_controls, max_controls) in controls.items():
                     hand = player_hands.get(player)
                     if not hand: continue
+                    # Use redeal's direct 'controls' property
                     if not (min_controls <= hand.controls <= max_controls):
-                        return False
-
-            # For suit holding checks
-            if suit_holding:
-                for player, suits in suit_holding.items():
-                    hand = player_hands.get(player)
-                    for suit_char, min_len in suits.items():
-                        suit = Suit[suit_char]  # Use Suit enum directly with ASCII symbols
-                        if len([card for card in hand.cards() if card.suit == suit]) < min_len:
-                            return False
-
-            # For hand shape checks
-            if hand_shape:
-                for player, shape in hand_shape.items():
-                    hand = player_hands.get(player)
-                    if list(hand.shape) != shape:
-                        return False
-
-            # For HCP checks
-            if hcp:
-                for player, hcp_range in hcp.items():
-                    hand = player_hands.get(player)
-                    # Calculate HCP using redeal's standard values
-                    hand_hcp = sum(
-                        4 if card.rank == Rank.A else
-                        3 if card.rank == Rank.K else
-                        2 if card.rank == Rank.Q else
-                        1 if card.rank == Rank.J else
-                        0
-                        for card in hand.cards()
-                    )
-                    if not (hcp_range[0] <= hand_hcp <= hcp_range[1]):
-                        return False
-
-            # For controls checks
-            if controls:
-                for player, controls_range in controls.items():
-                    hand = player_hands.get(player)
-                    hand_controls = self._calculate_controls(hand)
-                    if not (controls_range[0] <= hand_controls <= controls_range[1]):
                         return False
 
             # For losers checks (currently disabled)
             # if hand_losers:
             #     for player, losers_range in hand_losers.items():
             #         hand = player_hands.get(player)
-            #         hand_losers = self._calculate_losers(hand)
-            #         if not (losers_range[0] <= hand_losers <= losers_range[1]):
-            #             return False
+            #         # Ensure _calculate_losers is accessible or use hand.losers if available
+            #         # current_losers = self._calculate_losers(hand) # This would cause error if accept is nested
+            #         # For now, assuming hand_losers constraint is not actively used or will be fixed later
+            #         pass # Placeholder if hand_losers logic needs to be re-evaluated
 
             return True
 
@@ -173,35 +136,33 @@ class BridgeHandGenerator:
         
         formatted_hands = []
         generated_count = 0
-        attempts = 0
-        # Safety break for very restrictive conditions, or if num_hands is very large.
-        # Max attempts could be tuned based on typical success rates.
-        # Increase max_attempts for multiple hand generation
-        base_attempts = 2000
-        max_attempts = num_hands * (base_attempts * 2) if num_hands > 0 else base_attempts
-        if not (suit_holding or hcp or hand_shape or hand_losers or controls):
-            max_attempts = num_hands  # If no criteria, just generate num_hands
+        generation_attempts = 0
 
-        # Generate all hands at once since predeal is fixed
-        deals = [dealer() for _ in range(num_hands)]
+        DEFAULT_MAX_ATTEMPTS_WITH_CONSTRAINTS = 20000  # Default if constraints/predeal and no param provided
         
-        # Validate each deal
-        for deal in deals:
-            if accept(deal):
+        actual_max_attempts = max_attempts_param
+        if actual_max_attempts is None:
+            # Check if any significant constraints or non-empty predeals are active
+            # predeal_hands is guaranteed to be a dict by prior logic
+            is_predeal_effectively_empty = all(str(hand) == "- - - -" for hand in predeal_hands.values())
+            has_any_constraints = bool(suit_holding or hcp or hand_shape or hand_losers or controls)
+
+            if not has_any_constraints and is_predeal_effectively_empty:
+                # If no constraints and predeal is empty, max_attempts is num_hands (or 1 if num_hands is 0 to allow loop for validation if needed)
+                actual_max_attempts = num_hands if num_hands > 0 else 1
+            else:
+                # Constraints or significant predeal exist, use a higher default
+                actual_max_attempts = DEFAULT_MAX_ATTEMPTS_WITH_CONSTRAINTS
+        
+        if num_hands == 0:
+            return formatted_hands # Return immediately if 0 hands are requested
+
+        while generated_count < num_hands and generation_attempts < actual_max_attempts:
+            deal = dealer()  # Generate one deal using the prepared dealer
+            generation_attempts += 1
+            if accept(deal): # Use the accept function defined within generate_hands
                 formatted_hands.append(self._format_hand(deal))
                 generated_count += 1
-            
-            # If we have enough valid hands, break early
-            if generated_count >= num_hands:
-                break
-            
-            attempts += 1
-            
-            # If we've exceeded max attempts, break
-            if attempts >= max_attempts:
-                break
-        
-        return formatted_hands
         
         return formatted_hands
 
