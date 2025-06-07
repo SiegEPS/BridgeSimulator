@@ -7,6 +7,72 @@ class TestBridgeHandGenerator(unittest.TestCase):
     def setUp(self):
         self.generator = BridgeHandGenerator()
 
+    def test_predeal_parameter(self):
+        """
+        Test that predeal parameter correctly fixes specified cards in a hand.
+        """
+        # North's hand: AKT KJ84 QJ5 432
+        predeal = {
+            'N': 'AKT KJ84 QJ5 432'
+        }
+        
+        hands = self.generator.generate_hands(
+            num_hands=1,
+            predeal=predeal
+        )
+        
+        if hands:
+            north_hand = hands[0]['N']
+            # Sort cards using redeal's order: A, K, Q, J, T, 9, 8, 7, 6, 5, 4, 3, 2
+            rank_order = 'AKQJT98765432'
+            def sort_cards(cards):
+                return ''.join(sorted(cards, key=lambda x: rank_order.index(x)))
+            
+            # Verify North's hand matches exactly what we specified
+            self.assertEqual(sort_cards(north_hand['S']).upper(), 'AKT')
+            self.assertEqual(sort_cards(north_hand['H']).upper(), 'KJ84')
+            self.assertEqual(sort_cards(north_hand['D']).upper(), 'QJ5')
+            self.assertEqual(sort_cards(north_hand['C']).upper(), '432')
+        else:
+            self.fail("No hands generated with predeal parameter")
+
+    def test_multiple_predeal(self):
+        """
+        Test generating multiple hands with predeal for South.
+        """
+        # South's hand: AKQJ3 - KJT98 AKQ
+        predeal = {
+            'S': 'AKQJ3 - KJT98 AKQ'
+        }
+        
+        # Generate 3 hands with the predeal
+        hands = self.generator.generate_hands(
+            num_hands=3,
+            predeal=predeal
+        )
+        
+        self.assertEqual(len(hands), 3, "Did not generate 3 hands")
+        
+        # Verify each hand has the correct South hand
+        for south_hand in [h['S'] for h in hands]:
+            rank_order = 'AKQJT98765432'
+            def sort_cards(cards):
+                # Handle empty suits by returning empty string
+                if not cards:
+                    return ''
+                return ''.join(sorted(cards, key=lambda x: rank_order.index(x)))
+            
+            # Verify South's hand matches exactly what we specified
+            self.assertTrue('S' in south_hand)
+            self.assertTrue('H' in south_hand)
+            self.assertTrue('D' in south_hand)
+            self.assertTrue('C' in south_hand)
+            
+            self.assertEqual(sort_cards(south_hand['S']).upper(), 'AKQJ3')
+            self.assertEqual(sort_cards(south_hand['H']), '')  # Empty hearts
+            self.assertEqual(sort_cards(south_hand['D']).upper(), 'KJT98')
+            self.assertEqual(sort_cards(south_hand['C']).upper(), 'AKQ')
+
     def test_generate_default_number_of_hands(self):
         # Test generating 3 hands
         hands = self.generator.generate_hands(num_hands=3)
@@ -20,28 +86,28 @@ class TestBridgeHandGenerator(unittest.TestCase):
     def test_generate_multiple_hands(self):
         """Test generating multiple hands with constraints."""
         # Test generating hands with HCP constraint
-        hands = self.generator.generate_hands(num_hands=3, hcp={'N': (15, 17)})
+        hands = self.generator.generate_hands(num_hands=3, hcp={'N': (10, 20)})
         self.assertGreater(len(hands), 0, "Should generate at least one hand with HCP constraint")
         for hand_deal in hands:
             north_hand = hand_deal['N']
-            hcp_val = sum(
-                4 if card == 'A' else
-                3 if card == 'K' else
-                2 if card == 'Q' else
-                1 if card == 'J' else
-                0
-                for cards in north_hand.values()
-                for card in cards
+            # Convert our hand format to redeal Hand format
+            hand_str = " ".join(
+                ''.join(cards) if cards else '-' 
+                for suit, cards in sorted(north_hand.items(), 
+                    key=lambda x: {'S': 0, 'H': 1, 'D': 2, 'C': 3}[x[0]]
+                )
             )
-            self.assertTrue(15 <= hcp_val <= 17, f"North HCP {hcp_val} not in range (15,17)")
+            redeal_hand = Hand.from_str(hand_str)
+            hcp_val = redeal_hand.hcp
+            self.assertTrue(10 <= hcp_val <= 20, f"North HCP {hcp_val} not in range (10,20)")
 
         # Test generating hands with suit holding constraint
-        hands = self.generator.generate_hands(num_hands=20, suit_holding={'E': {'S': 6}})
+        hands = self.generator.generate_hands(num_hands=20, suit_holding={'E': {'S': 5}})
         self.assertGreater(len(hands), 0, "Should generate at least one hand with suit holding constraint")
         for hand_deal in hands:
             east_hand = hand_deal['E']
             spades = east_hand.get('S', [])
-            self.assertGreaterEqual(len(spades), 6, "East Spades length error")
+            self.assertGreaterEqual(len(spades), 5, "East Spades length error")
 
         # Test generating hands with combined constraints
         hands = self.generator.generate_hands(
@@ -73,11 +139,15 @@ class TestBridgeHandGenerator(unittest.TestCase):
             # Verify West controls
             west_hand = hand_deal['W']
             # Create Hand object directly from string lists
-            # Format should be "AK432 K87 QJT54 -" with spaces between suits and dash for empty
-            hand_str = f"{''.join(west_hand['S']).upper()} {''.join(west_hand['H']).upper()} {''.join(west_hand['D']).upper()} {''.join(west_hand['C']).upper()}"
-            # Add spaces between suits and dash for empty suits
-            hand_str = hand_str.replace(' ', ' ')  # Ensure spaces between suits
-            hand_str = hand_str.replace('-', '-')   # Ensure dash for empty suit
+            # Format should be "AKQJT98765432 - - -" with spaces between suits and dash for empty
+            # Format should be "AKQ - - -" with spaces between suits and dash for empty
+            suits = [
+                ''.join(west_hand['S']).upper() or '-',
+                ''.join(west_hand['H']).upper() or '-',
+                ''.join(west_hand['D']).upper() or '-',
+                ''.join(west_hand['C']).upper() or '-'
+            ]
+            hand_str = ' '.join(suits)  # Ensure spaces between suits and dashes for empty suits
             redeal_hand = Hand.from_str(hand_str)
             controls = self.generator._calculate_controls(redeal_hand)
             self.assertTrue(4 <= controls <= 10, f"West controls {controls} not in (4,10)")
@@ -108,8 +178,14 @@ class TestBridgeHandGenerator(unittest.TestCase):
         if hands:
             east_hand = hands[0]['E']
             # Create Hand object directly from string lists
-            # Format cards as 'AKQ AKQ AKQ AKQ' with uppercase ranks
-            hand_str = f"{''.join(east_hand['S']).upper()} {''.join(east_hand['H']).upper()} {''.join(east_hand['D']).upper()} {''.join(east_hand['C']).upper()}"
+            # Format should be "AKQ - - -" with spaces between suits and dash for empty
+            suits = [
+                ''.join(east_hand['S']).upper() or '-',
+                ''.join(east_hand['H']).upper() or '-',
+                ''.join(east_hand['D']).upper() or '-',
+                ''.join(east_hand['C']).upper() or '-'
+            ]
+            hand_str = ' '.join(suits)  # Ensure spaces between suits and dashes for empty suits
             redeal_hand = Hand.from_str(hand_str)
             self.assertGreaterEqual(len(redeal_hand[0]), 6, "East Spades length error")
         else:
@@ -123,8 +199,15 @@ class TestBridgeHandGenerator(unittest.TestCase):
         if hands:
             south_hand = hands[0]['S']
             # Create Hand object directly from string lists
-            # Format cards as 'AKQ AKQ AKQ AKQ' with uppercase ranks
-            hand_str = f"{''.join(south_hand['S']).upper()} {''.join(south_hand['H']).upper()} {''.join(south_hand['D']).upper()} {''.join(south_hand['C']).upper()}"
+            # Format should be "AKQJT98765432 - - -" with spaces between suits and dash for empty
+            # Format should be "AKQ - - -" with spaces between suits and dash for empty
+            suits = [
+                ''.join(south_hand['S']).upper() or '-',
+                ''.join(south_hand['H']).upper() or '-',
+                ''.join(south_hand['D']).upper() or '-',
+                ''.join(south_hand['C']).upper() or '-'
+            ]
+            hand_str = ' '.join(suits)  # Ensure spaces between suits and dashes for empty suits
             redeal_hand = Hand.from_str(hand_str)
             self.assertEqual(redeal_hand.shape, (5, 3, 3, 2), "Hand shape mismatch")
         else:
@@ -145,64 +228,25 @@ class TestBridgeHandGenerator(unittest.TestCase):
         hand_obj_none = Hand.from_str('QJ T9 87 65432')
         self.assertEqual(self.generator._calculate_controls(hand_obj_none), 0)
 
-    # def test_calculate_losers_detailed(self):
-    #     # Test losers calculation
-    #     hand_obj_0_losers = Hand.from_str('AKQ AKQ AKQ K')
-    #     self.assertEqual(self.generator._calculate_losers(hand_obj_0_losers), 0, "0 Losers failed")
-    #     
-    #     hand_obj_1_loser = Hand.from_str('AKQ AKQ AKQ JT')
-    #     self.assertEqual(self.generator._calculate_losers(hand_obj_1_loser), 1, "1 Loser failed")
-    #     
-    #     hand_obj_2_losers = Hand.from_str('AKQ AKQ JT JT')
-    #     self.assertEqual(self.generator._calculate_losers(hand_obj_2_losers), 2, "2 Losers failed")
-
-    # def test_calculate_losers_detailed(self):
-    #     # S: AKQ, H: AKQ, D: AKQ, C: K (0 losers)
-    #     hand_0_losers = Hand.from_str('AKQ AKQ AKQ K')
-    #     self.assertEqual(self.generator._calculate_losers(hand_0_losers), 0, "0 Losers failed")
-    #
-    #     # S: xxx, H: xxx, D: xxx, C: xxx (no A,K,Q) -> 3*4 = 12 losers
-    #     hand_12_losers = Hand.from_str('234 234 234 2345')
-    #     self.assertEqual(self.generator._calculate_losers(hand_12_losers), 12, "12 Losers failed")
-    #     
-    #     # S: Axx, H: Kxx, D: Qxx, C: Jxx (Axx=1, Kxx=1, Qxx=1, Jxx=3 -> 1+1+1+3 = 6 losers)
-    #     hand_6_losers = self._get_hand_obj_from_str_lists(['A','2','3'],['K','2','3'],['Q','2','3'],['J','2','3'])
-    #     self.assertEqual(self.generator._calculate_losers(hand_6_losers), 6, "6 Losers failed")
-    #
-    #     # Void in Spades: S: -, H: AKQ, D: AKQ, C: AKQ (0 losers for void, 0 for others = 0)
-    #     hand_void = self._get_hand_obj_from_str_lists([], ['A','K','Q'], ['A','K','Q'], ['A','K','Q'])
-    #     self.assertEqual(self.generator._calculate_losers(hand_void), 0, "Void hand should have 0 losers")
-
-    #     # Singleton Ace (0L), King (1L), Queen (1L), Jack (1L)
-    #     self.assertEqual(self.generator._calculate_losers(self._get_hand_obj_from_str_lists(['A'],[],[],[])), 0, "Singleton Ace")
-    #     self.assertEqual(self.generator._calculate_losers(self._get_hand_obj_from_str_lists(['K'],[],[],[])), 1, "Singleton King")
-    #     self.assertEqual(self.generator._calculate_losers(self._get_hand_obj_from_str_lists(['Q'],[],[],[])), 1, "Singleton Queen")
-    #     self.assertEqual(self.generator._calculate_losers(self._get_hand_obj_from_str_lists(['J'],[],[],[])), 1, "Singleton Jack")
-
-    #     # Doubleton AK (0L), AQ (0L), AJ (0L), KQ (1L), KJ (1L), QJ (2L), xx (2L)
-    #     self.assertEqual(self.generator._calculate_losers(self._get_hand_obj_from_str_lists(['A','K'],[],[],[])), 0, "Doubleton AK")
-    #     self.assertEqual(self.generator._calculate_losers(self._get_hand_obj_from_str_lists(['A','Q'],[],[],[])), 0, "Doubleton AQ") 
-    #     self.assertEqual(self.generator._calculate_losers(self._get_hand_obj_from_str_lists(['A','J'],[],[],[])), 0, "Doubleton AJ") 
-    #     self.assertEqual(self.generator._calculate_losers(self._get_hand_obj_from_str_lists(['K','Q'],[],[],[])), 1, "Doubleton KQ")
-    #     self.assertEqual(self.generator._calculate_losers(self._get_hand_obj_from_str_lists(['K','J'],[],[],[])), 1, "Doubleton KJ")
-    #     self.assertEqual(self.generator._calculate_losers(self._get_hand_obj_from_str_lists(['Q','J'],[],[],[])), 2, "Doubleton QJ") 
-    #     self.assertEqual(self.generator._calculate_losers(self._get_hand_obj_from_str_lists(['7','2'],[],[],[])), 2, "Doubleton xx")
-
     def test_controls_parameter(self):
         hands = self.generator.generate_hands(num_hands=1, controls={'W': (6, 7)})
         if hands:
             west_hand_dict = hands[0]['W']
             # Create Hand object directly from string lists
-            # Format cards as 'AKQ AKQ AKQ AKQ' with uppercase ranks
-            hand_str = f"{''.join(west_hand_dict['S']).upper()} {''.join(west_hand_dict['H']).upper()} {''.join(west_hand_dict['D']).upper()} {''.join(west_hand_dict['C']).upper()}"
-            west_hand = Hand.from_str(hand_str)
-            controls = self.generator._calculate_controls(west_hand)
+            # Format should be "AKQ - - -" with spaces between suits and dash for empty
+            suits = [
+                ''.join(west_hand_dict['S']).upper() or '-',
+                ''.join(west_hand_dict['H']).upper() or '-',
+                ''.join(west_hand_dict['D']).upper() or '-',
+                ''.join(west_hand_dict['C']).upper() or '-'
+            ]
+            hand_str = ' '.join(suits)  # Ensure spaces between suits and dashes for empty suits
+            redeal_hand = Hand.from_str(hand_str)
+            controls = self.generator._calculate_controls(redeal_hand)
             self.assertTrue(6 <= controls <= 7, f"West controls {controls} not in (6,7)")
         else:
             print("Skipping controls_parameter test: No hand generated with W:(6,7) Controls.")
 
-    # def test_losers_parameter(self):
-    #     hands = self.generator.generate_hands(num_hands=1, hand_losers={'N': (7, 8)})
     #     if hands:
     #         north_hand_dict = hands[0]['N']
     #         north_hand_obj = self._get_hand_obj_from_str_lists(

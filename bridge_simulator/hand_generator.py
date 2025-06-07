@@ -17,7 +17,8 @@ class BridgeHandGenerator:
                        hcp: Dict[str, Tuple[int, int]] = None,
                        hand_shape: Dict[str, List[int]] = None,
                        hand_losers: Dict[str, Tuple[int, int]] = None,
-                       controls: Dict[str, Tuple[int, int]] = None
+                       controls: Dict[str, Tuple[int, int]] = None,
+                       predeal: Dict[str, str] = None
                        ) -> List[Dict[str, Dict[str, List[str]]]]:
         """
         Generate multiple bridge hands using redeal's simulation capabilities,
@@ -148,8 +149,27 @@ class BridgeHandGenerator:
 
             return True
 
-        predeal = {player: "- - - -" for player in ['N', 'E', 'S', 'W']}
-        dealer = redeal.Deal.prepare(predeal)
+        # Prepare the predeal dictionary
+        predeal_dict = predeal or {player: "- - - -" for player in ['N', 'E', 'S', 'W']}
+        
+        # Validate predeal format
+        for direction, hand_str in predeal_dict.items():
+            if direction not in ['N', 'E', 'S', 'W']:
+                raise ValueError(f"Invalid direction: {direction}. Must be one of N, E, S, W")
+            # Validate hand string format
+            suits = hand_str.split()
+            if len(suits) != 4:
+                raise ValueError(f"Invalid hand format for {direction}: {hand_str}. Must have 4 suits.")
+            for suit in suits:
+                if suit != '-' and not all(c in 'AKQJT98765432' for c in suit):
+                    raise ValueError(f"Invalid cards in {direction}: {suit}. Must be valid card ranks.")
+        
+        # Convert predeal strings to Hand objects
+        predeal_hands = {}
+        for direction, hand_str in predeal_dict.items():
+            predeal_hands[direction] = Hand.from_str(hand_str)
+        
+        dealer = redeal.Deal.prepare(predeal_hands)
         
         formatted_hands = []
         generated_count = 0
@@ -162,15 +182,26 @@ class BridgeHandGenerator:
         if not (suit_holding or hcp or hand_shape or hand_losers or controls):
             max_attempts = num_hands  # If no criteria, just generate num_hands
 
-        while generated_count < num_hands and attempts < max_attempts:
-            attempts += 1
-            deal = dealer()
+        # Generate all hands at once since predeal is fixed
+        deals = [dealer() for _ in range(num_hands)]
+        
+        # Validate each deal
+        for deal in deals:
             if accept(deal):
                 formatted_hands.append(self._format_hand(deal))
                 generated_count += 1
-            # If no criteria, we accept every deal, so break after num_hands iterations.
-            if not (suit_holding or hcp or hand_shape or hand_losers or controls) and attempts >= num_hands:
+            
+            # If we have enough valid hands, break early
+            if generated_count >= num_hands:
                 break
+            
+            attempts += 1
+            
+            # If we've exceeded max attempts, break
+            if attempts >= max_attempts:
+                break
+        
+        return formatted_hands
         
         return formatted_hands
 
@@ -223,10 +254,10 @@ class BridgeHandGenerator:
     #     """
     #     return round(hand.newltc)
 
-    def _format_hand(self, deal) -> Dict[str, Dict[str, List[str]]]:
+    def _format_hand(self, deal):
         """
         Format a deal into a more user-friendly structure using redeal's built-in formatting.
-
+        
         Args:
             deal: Deal object to format
             
@@ -234,36 +265,35 @@ class BridgeHandGenerator:
             Dict: A dictionary containing the cards for each player, organized by suit.
         """
         formatted_hand = {}
-        players = ['N', 'E', 'S', 'W']
         
-        for player in players:
-            # Get the player's hand using Deal's tuple indexing
-            player_idx = {'N': 0, 'E': 1, 'S': 2, 'W': 3}[player]
-            player_hand = deal[player_idx]
-            
-            # Get the hand's string representation using redeal's formatting
-            hand_str = player_hand.to_str()
+        # Map our suit symbols to redeal's suit order
+        suit_map = {
+            'S': Suit.S,  # Spades
+            'H': Suit.H,  # Hearts
+            'D': Suit.D,  # Diamonds
+            'C': Suit.C   # Clubs
+        }
+        
+        # Create dictionary for each player
+        for player in ['N', 'E', 'S', 'W']:
             formatted_hand[player] = {}
             
-            # Split the string into suits
-            suits = hand_str.split()
+            # Get the player's hand using Deal's tuple indexing
+            player_idx = {'N': 0, 'E': 1, 'S': 2, 'W': 3}[player]
+            hand = deal[player_idx]
             
-            # Map our suit symbols to redeal's symbols
-            suit_map = {
-                '♠': 'S',
-                '♥': 'H',
-                '♦': 'D',
-                '♣': 'C'
-            }
-            
-            # Format each suit
-            for suit_char, suit_str in zip(SUITS, suits):
-                if suit_str == '-':
-                    formatted_hand[player][suit_char] = []
-                else:
-                    # Convert redeal's string format to our format
-                    formatted_hand[player][suit_char] = list(suit_str)
-                    # Sort cards within each suit by rank
+            # Get cards for each suit
+            for suit_char, suit in suit_map.items():
+                # Initialize suit as empty list
+                formatted_hand[player][suit_char] = []
+                
+                # Get cards in this suit using Hand's cards() method
+                for card in hand.cards():
+                    if card.suit == suit:
+                        formatted_hand[player][suit_char].append(str(card.rank))
+                
+                # Sort cards within each suit by rank if we have any cards
+                if formatted_hand[player][suit_char]:
                     formatted_hand[player][suit_char].sort(
                         key=lambda x: RANKS.index(x),
                         reverse=True
