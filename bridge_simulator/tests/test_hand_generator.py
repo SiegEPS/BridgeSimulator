@@ -8,6 +8,7 @@ class TestBridgeHandGenerator(unittest.TestCase):
         self.generator = BridgeHandGenerator()
 
     def test_generate_default_number_of_hands(self):
+        # Test generating 3 hands
         hands = self.generator.generate_hands(num_hands=3)
         self.assertEqual(len(hands), 3)
         for hand_deal in hands:
@@ -15,6 +16,71 @@ class TestBridgeHandGenerator(unittest.TestCase):
             for player in ['N', 'E', 'S', 'W']:
                 total_cards = sum(len(cards) for cards in hand_deal[player].values())
                 self.assertEqual(total_cards, 13, f"Player {player} does not have 13 cards.")
+
+    def test_generate_multiple_hands(self):
+        """Test generating multiple hands with constraints."""
+        # Test generating hands with HCP constraint
+        hands = self.generator.generate_hands(num_hands=3, hcp={'N': (15, 17)})
+        self.assertGreater(len(hands), 0, "Should generate at least one hand with HCP constraint")
+        for hand_deal in hands:
+            north_hand = hand_deal['N']
+            hcp_val = sum(
+                4 if card == 'A' else
+                3 if card == 'K' else
+                2 if card == 'Q' else
+                1 if card == 'J' else
+                0
+                for cards in north_hand.values()
+                for card in cards
+            )
+            self.assertTrue(15 <= hcp_val <= 17, f"North HCP {hcp_val} not in range (15,17)")
+
+        # Test generating hands with suit holding constraint
+        hands = self.generator.generate_hands(num_hands=20, suit_holding={'E': {'S': 6}})
+        self.assertGreater(len(hands), 0, "Should generate at least one hand with suit holding constraint")
+        for hand_deal in hands:
+            east_hand = hand_deal['E']
+            spades = east_hand.get('S', [])
+            self.assertGreaterEqual(len(spades), 6, "East Spades length error")
+
+        # Test generating hands with combined constraints
+        hands = self.generator.generate_hands(
+            num_hands=5,
+            hcp={'N': (10, 20)},  # Wider HCP range
+            suit_holding={'E': {'S': 5}},  # Reduced suit length requirement
+            controls={'W': (4, 10)}  # Wider controls range
+        )
+        self.assertGreater(len(hands), 0, "Should generate at least one hand with combined constraints")
+        for hand_deal in hands:
+            # Verify North HCP
+            north_hand = hand_deal['N']
+            hcp_val = sum(
+                4 if card == 'A' else
+                3 if card == 'K' else
+                2 if card == 'Q' else
+                1 if card == 'J' else
+                0
+                for cards in north_hand.values()
+                for card in cards
+            )
+            self.assertTrue(10 <= hcp_val <= 20, f"North HCP {hcp_val} not in range (10,20)")
+
+            # Verify East suit holding
+            east_hand = hand_deal['E']
+            spades = east_hand.get('S', [])
+            self.assertGreaterEqual(len(spades), 5, "East Spades length error")
+
+            # Verify West controls
+            west_hand = hand_deal['W']
+            # Create Hand object directly from string lists
+            # Format should be "AK432 K87 QJT54 -" with spaces between suits and dash for empty
+            hand_str = f"{''.join(west_hand['S']).upper()} {''.join(west_hand['H']).upper()} {''.join(west_hand['D']).upper()} {''.join(west_hand['C']).upper()}"
+            # Add spaces between suits and dash for empty suits
+            hand_str = hand_str.replace(' ', ' ')  # Ensure spaces between suits
+            hand_str = hand_str.replace('-', '-')   # Ensure dash for empty suit
+            redeal_hand = Hand.from_str(hand_str)
+            controls = self.generator._calculate_controls(redeal_hand)
+            self.assertTrue(4 <= controls <= 10, f"West controls {controls} not in (4,10)")
 
     def test_hcp_parameter(self):
         # Test with a specific HCP range. May need multiple generations for a match.

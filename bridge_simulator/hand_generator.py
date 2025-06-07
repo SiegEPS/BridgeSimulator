@@ -156,9 +156,11 @@ class BridgeHandGenerator:
         attempts = 0
         # Safety break for very restrictive conditions, or if num_hands is very large.
         # Max attempts could be tuned based on typical success rates.
-        max_attempts = num_hands * 2000 if num_hands > 0 else 2000 
+        # Increase max_attempts for multiple hand generation
+        base_attempts = 2000
+        max_attempts = num_hands * (base_attempts * 2) if num_hands > 0 else base_attempts
         if not (suit_holding or hcp or hand_shape or hand_losers or controls):
-             max_attempts = num_hands # If no criteria, just generate num_hands
+            max_attempts = num_hands  # If no criteria, just generate num_hands
 
         while generated_count < num_hands and attempts < max_attempts:
             attempts += 1
