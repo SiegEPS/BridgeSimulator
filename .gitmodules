@@ -1,0 +1,4 @@
+[submodule "redeal"]
+	path = redeal
+	url = https://github.com/anntzer/redeal.git
+	branch = main
