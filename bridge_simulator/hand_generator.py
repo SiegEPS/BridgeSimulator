@@ -153,6 +153,170 @@ class BridgeHandGenerator:
 
             return True
 
+        # Use helper to prepare dealer
+        dealer = self._prepare_dealer(
+            suit_holding, hcp, hand_shape, hand_losers, controls, any_shape, smart_stack, predeal
+        )
+        
+        formatted_hands = []
+        generated_count = 0
+        generation_attempts = 0
+        
+        # Determine max attempts (logic simplified/duplicated for now, better to extract if complex)
+        DEFAULT_MAX_ATTEMPTS_WITH_CONSTRAINTS = 20000 
+        actual_max_attempts = max_attempts_param
+        if actual_max_attempts is None:
+             # Basic check for constraints
+             has_constraints = bool(suit_holding or hcp or hand_shape or hand_losers or controls or any_shape)
+             
+             # Check if predeal is effectively empty
+             # We rely on _prepare_dealer having done the heavy lifting, but we can't inspect 'dealer'.
+             # Re-checking predeal dict state:
+             predeal_dict = predeal or {player: "- - - -" for player in ['N', 'E', 'S', 'W']}
+             is_predeal_empty = True
+             for v in predeal_dict.values():
+                 if v != "- - - -": is_predeal_empty = False
+             
+             # Check smart_stack
+             if smart_stack: has_constraints = True
+
+             if not has_constraints and is_predeal_empty:
+                 actual_max_attempts = num_hands if num_hands > 0 else 1
+             else:
+                 actual_max_attempts = DEFAULT_MAX_ATTEMPTS_WITH_CONSTRAINTS
+
+        if num_hands == 0:
+            return formatted_hands
+
+        while generated_count < num_hands and generation_attempts < actual_max_attempts:
+            deal = dealer()  # Generate one deal using the prepared dealer
+            generation_attempts += 1
+            if accept(deal): 
+                formatted_hands.append(self._format_hand(deal))
+                generated_count += 1
+        
+        return formatted_hands
+
+    def yield_deals(self, num_hands: int = 100,
+                       suit_holding: Dict[str, Dict[str, int]] = None,
+                       hcp: Dict[str, Tuple[int, int]] = None,
+                       hand_shape: Dict[str, List[int]] = None,
+                       hand_losers: Dict[str, Tuple[int, int]] = None,
+                       controls: Dict[str, Tuple[int, int]] = None,
+                       any_shape: Dict[str, str] = None,
+                       smart_stack: Dict[str, Dict] = None,
+                       predeal: Dict[str, str] = None,
+                       max_attempts_param: int = None
+                       ):
+        """
+        Generator that yields redeal.Deal objects directly.
+        Identical signature to generate_hands but returns an iterator of Deal objects.
+        """
+        dealer = self._prepare_dealer(
+            suit_holding, hcp, hand_shape, hand_losers, controls, any_shape, smart_stack, predeal
+        )
+        
+        # Define internal accept function (duplicated from generate_hands for isolation)
+        def accept(deal) -> bool:
+            # Create a dictionary of player hands
+            player_hands = {
+                'N': deal.north,
+                'E': deal.east,
+                'S': deal.south,
+                'W': deal.west
+            }
+
+            # Check suit holding requirements
+            if suit_holding:
+                for player, suits in suit_holding.items():
+                    hand = player_hands.get(player)
+                    if not hand: continue
+                    for suit_char, min_len in suits.items():
+                        suit = {'S': Suit.S, 'H': Suit.H, 'D': Suit.D, 'C': Suit.C}[suit_char]
+                        # Get cards in the suit directly
+                        if len([card for card in hand.cards() if card.suit == suit]) < min_len:
+                            return False
+
+            # Check hand shape requirements
+            if hand_shape:
+                for player, shape in hand_shape.items():
+                    hand = player_hands.get(player)
+                    if not hand: continue
+                    # Get the shape as a list of lengths in redeal's order (S,H,D,C)
+                    actual_shape = list(hand.shape)
+                    
+                    # Check for mismatch, allowing -1 as wildcard in target shape
+                    is_match = True
+                    if len(actual_shape) != len(shape):
+                        is_match = False
+                    else:
+                        for actual, target in zip(actual_shape, shape):
+                            if target != -1 and actual != target:
+                                is_match = False
+                                break
+                    
+                    if not is_match:
+                        return False
+
+            # Check HCP requirements
+            if hcp:
+                for player, (min_hcp, max_hcp) in hcp.items():
+                    hand = player_hands.get(player)
+                    if not hand: continue
+                    if not (min_hcp <= hand.hcp <= max_hcp):
+                        return False
+
+            # Check controls requirements
+            if controls:
+                for player, (min_controls, max_controls) in controls.items():
+                    hand = player_hands.get(player)
+                    if not hand: continue
+                    # Use redeal's direct 'controls' property
+                    if not (min_controls <= hand.controls <= max_controls):
+                        return False
+
+            # Check advanced shape requirements
+            if any_shape:
+                for player, shape_str in any_shape.items():
+                    hand = player_hands.get(player)
+                    if not hand: continue
+                    
+                    try:
+                        # Handle keywords
+                        if shape_str.lower() == 'balanced':
+                            shape_obj = balanced
+                        elif shape_str.lower() == 'semibalanced': 
+                            shape_obj = semibalanced
+                        else:
+                            # Parse string into Shape object
+                            shape_obj = Shape(shape_str)
+                            
+                        # Check if hand matches shape
+                        if not shape_obj(hand):
+                            return False
+                    except Exception:
+                        return False
+
+            return True
+
+        generated_count = 0
+        generation_attempts = 0
+        
+        DEFAULT_MAX_ATTEMPTS = 20000
+        actual_max_attempts = max_attempts_param or DEFAULT_MAX_ATTEMPTS
+        
+        # Simple attempt limit logic if no num_hands
+        if num_hands <= 0:
+             return
+
+        while generated_count < num_hands and generation_attempts < actual_max_attempts:
+            deal = dealer()
+            generation_attempts += 1
+            if accept(deal):
+                yield deal
+                generated_count += 1
+
+    def _prepare_dealer(self, suit_holding, hcp, hand_shape, hand_losers, controls, any_shape, smart_stack, predeal):
         # Prepare the predeal dictionary
         predeal_dict = predeal or {player: "- - - -" for player in ['N', 'E', 'S', 'W']}
         
@@ -205,49 +369,7 @@ class BridgeHandGenerator:
                 ss = SmartStack(shape_obj, hcp_eval, hcp_range)
                 predeal_hands[player] = ss
 
-        dealer = Deal.prepare(predeal_hands)
-        
-        formatted_hands = []
-        generated_count = 0
-        generation_attempts = 0
-
-        DEFAULT_MAX_ATTEMPTS_WITH_CONSTRAINTS = 20000  # Default if constraints/predeal and no param provided
-        
-        actual_max_attempts = max_attempts_param
-        if actual_max_attempts is None:
-            # Check if any significant constraints or non-empty predeals are active
-            # predeal_hands is guaranteed to be a dict by prior logic
-            # predeal_hands is guaranteed to be a dict by prior logic
-            # Check if predeal is effectively empty (considering SmartStack objects are not strings)
-            is_predeal_effectively_empty = True
-            for h in predeal_hands.values():
-                if isinstance(h, SmartStack):
-                    is_predeal_effectively_empty = False
-                    break
-                if str(h) != "- - - -":
-                    is_predeal_effectively_empty = False
-                    break
-
-            has_any_constraints = bool(suit_holding or hcp or hand_shape or hand_losers or controls or any_shape)
-
-            if not has_any_constraints and is_predeal_effectively_empty:
-                # If no constraints and predeal is empty, max_attempts is num_hands (or 1 if num_hands is 0 to allow loop for validation if needed)
-                actual_max_attempts = num_hands if num_hands > 0 else 1
-            else:
-                # Constraints or significant predeal exist, use a higher default
-                actual_max_attempts = DEFAULT_MAX_ATTEMPTS_WITH_CONSTRAINTS
-        
-        if num_hands == 0:
-            return formatted_hands # Return immediately if 0 hands are requested
-
-        while generated_count < num_hands and generation_attempts < actual_max_attempts:
-            deal = dealer()  # Generate one deal using the prepared dealer
-            generation_attempts += 1
-            if accept(deal): # Use the accept function defined within generate_hands
-                formatted_hands.append(self._format_hand(deal))
-                generated_count += 1
-        
-        return formatted_hands
+        return Deal.prepare(predeal_hands)
 
     def generate_hand(self) -> Dict[str, Dict[str, List[str]]]:
         """
