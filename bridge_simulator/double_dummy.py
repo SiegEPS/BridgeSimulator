@@ -52,3 +52,50 @@ class DoubleDummySolver:
             
         contract_with_declarer = f"{contract_str}{declarer}"
         return self.deal.dd_score(contract_with_declarer, vul=vulnerable)
+
+    @staticmethod
+    def solve(hands: dict, contract_str: str, declarer_char: str) -> int:
+        """
+        Static method to solve a deal provided in dictionary format (API format).
+        
+        Args:
+            hands: Dictionary of hands { 'N': {'S': [...], ...}, ... }
+            contract_str: Contract string (e.g., "4S", "3NT")
+            declarer_char: Declarer ('N', 'E', 'S', 'W')
+            
+        Returns:
+            int: Number of tricks
+        """
+        # Convert dictionary to redeal.redeal.Hand objects
+        from redeal.redeal import Hand
+        
+        predeal_dict = {}
+        for player, suits in hands.items():
+            # Reconstruct hand string "S H D C"
+            # Suits from dict might be lists of ranks
+            # redeal expects space-separated suits usually, but Hand.from_str parses standard string
+            # Let's construct standard string "AK... ... ... ..."
+            
+            # Ensure order Spades, Hearts, Diamonds, Clubs
+            s_cards = "".join(sorted(suits.get('S', []), key=lambda r: "AKQJT98765432".index(r) if r in "AKQJT98765432" else 99))
+            h_cards = "".join(sorted(suits.get('H', []), key=lambda r: "AKQJT98765432".index(r) if r in "AKQJT98765432" else 99))
+            d_cards = "".join(sorted(suits.get('D', []), key=lambda r: "AKQJT98765432".index(r) if r in "AKQJT98765432" else 99))
+            c_cards = "".join(sorted(suits.get('C', []), key=lambda r: "AKQJT98765432".index(r) if r in "AKQJT98765432" else 99))
+            
+            # Hand.from_str expects "S H D C" (space separated)
+            # If a suit is empty, it uses "-"
+            s_cards = s_cards if s_cards else "-"
+            h_cards = h_cards if h_cards else "-"
+            d_cards = d_cards if d_cards else "-"
+            c_cards = c_cards if c_cards else "-"
+            
+            hand_str = f"{s_cards} {h_cards} {d_cards} {c_cards}"
+            predeal_dict[player] = Hand.from_str(hand_str)
+            
+        # Create Deal
+        dealer = Deal.prepare(predeal_dict)
+        deal = dealer()
+        
+        # Solve
+        solver = DoubleDummySolver(deal)
+        return solver.get_tricks(contract_str, declarer_char)

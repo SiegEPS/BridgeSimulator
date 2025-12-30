@@ -79,5 +79,21 @@ class TestDoubleDummySolver(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.solver.get_score("4H", 'X', vulnerable=False)
 
+    def test_solve_from_dictionary(self):
+        """Test the ability to solve a deal provided as a dictionary (API format)."""
+        # Dictionary format matching what hand_generator returns
+        # N has all Spades, S has all Hearts, E Diamonds, W Clubs
+        hand_dict = {
+            'N': {'S': ['A','K','Q','J','T','9','8','7','6','5','4','3','2'], 'H': [], 'D': [], 'C': []},
+            'S': {'S': [], 'H': ['A','K','Q','J','T','9','8','7','6','5','4','3','2'], 'D': [], 'C': []},
+            'E': {'S': [], 'H': [], 'D': ['A','K','Q','J','T','9','8','7','6','5','4','3','2'], 'C': []},
+            'W': {'S': [], 'H': [], 'D': [], 'C': ['A','K','Q','J','T','9','8','7','6','5','4','3','2']}
+        }
+        
+        # Use the static method provided by the plan (or expected implementation)
+        # Verify 7S by North makes 13 tricks
+        tricks = DoubleDummySolver.solve(hand_dict, "7S", "N")
+        self.assertEqual(tricks, 13)
+
 if __name__ == '__main__':
     unittest.main()
