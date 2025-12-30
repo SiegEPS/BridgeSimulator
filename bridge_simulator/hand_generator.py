@@ -84,7 +84,18 @@ class BridgeHandGenerator:
                     if not hand: continue
                     # Get the shape as a list of lengths in redeal's order (S,H,D,C)
                     actual_shape = list(hand.shape)
-                    if actual_shape != shape:
+                    
+                    # Check for mismatch, allowing -1 as wildcard in target shape
+                    is_match = True
+                    if len(actual_shape) != len(shape):
+                        is_match = False
+                    else:
+                        for actual, target in zip(actual_shape, shape):
+                            if target != -1 and actual != target:
+                                is_match = False
+                                break
+                    
+                    if not is_match:
                         return False
 
             # Check HCP requirements

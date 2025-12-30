@@ -324,5 +324,34 @@ class TestBridgeHandGenerator(unittest.TestCase):
             self.assertGreaterEqual(lengths[0], 5, "Longest suit should be >= 5")
             self.assertGreaterEqual(lengths[1], 5, "Second longest suit should be >= 5")
 
+    def test_hand_shape_wildcards(self):
+        """
+        Test that hand_shape parameter supports -1 as a wildcard.
+        Example: [5, 4, -1, -1] should match any hand starting with 5 Spades, 4 Hearts.
+        """
+        # Request hands with 5 Spades and 4 Hearts, any minors
+        hands = self.generator.generate_hands(
+            num_hands=5, 
+            hand_shape={'S': [5, 4, -1, -1]}
+        )
+        
+        self.assertGreater(len(hands), 0, "Should generate hands with shape wildcards")
+        
+        for hand_deal in hands:
+            south_hand = hand_deal['S']
+            
+            # Check Spades
+            spades = south_hand.get('S', [])
+            self.assertEqual(len(spades), 5, "South should have 5 Spades")
+            
+            # Check Hearts
+            hearts = south_hand.get('H', [])
+            self.assertEqual(len(hearts), 4, "South should have 4 Hearts")
+            
+            # Check Minors (can be anything as long as total is 13)
+            diamonds_len = len(south_hand.get('D', []))
+            clubs_len = len(south_hand.get('C', []))
+            self.assertEqual(diamonds_len + clubs_len, 4, "Remaining cards should sum to 4")
+
 if __name__ == '__main__':
     unittest.main()
