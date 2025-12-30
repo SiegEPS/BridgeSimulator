@@ -1,6 +1,6 @@
 import redeal
 from typing import Dict, List, Tuple
-from redeal.redeal import Hand, Card, Suit, Rank, Deal, Shape, balanced, semibalanced, Shape, balanced, semibalanced
+from redeal.redeal import Hand, Card, Suit, Rank, Deal, Shape, balanced, semibalanced, SmartStack, hcp as hcp_eval
 
 # Define the suits in order of importance (from highest to lowest)
 SUITS = ['S', 'H', 'D', 'C']
@@ -19,6 +19,7 @@ class BridgeHandGenerator:
                        hand_losers: Dict[str, Tuple[int, int]] = None,
                        controls: Dict[str, Tuple[int, int]] = None,
                        any_shape: Dict[str, str] = None,
+                       smart_stack: Dict[str, Dict] = None,
                        predeal: Dict[str, str] = None,
                        max_attempts_param: int = None
                        ) -> List[Dict[str, Dict[str, List[str]]]]:
@@ -41,6 +42,8 @@ class BridgeHandGenerator:
                       Example: {'E': (4, 6)} means East has 4-6 controls.
             any_shape: Optional. Dictionary specifying advanced shape constraints.
                        Example: {'N': 'balanced'} or {'E': '(55)xx'}.
+            smart_stack: Optional. Dictionary specifying SmartStack constraints for efficient generation.
+                       Example: {'N': {'shape': 'balanced', 'hcp': (15, 17)}}.
             
         Returns:
             List[Dict]: List of dictionaries containing cards for each player, organized by suit.
@@ -170,6 +173,38 @@ class BridgeHandGenerator:
         for direction, hand_str in predeal_dict.items():
             predeal_hands[direction] = Hand.from_str(hand_str)
         
+        # Process SmartStack constraints
+        if smart_stack:
+            for player, config in smart_stack.items():
+                if player in predeal_hands and len(predeal_hands[player].cards()) > 0:
+                     # Don't overwrite explicit predeal if it has cards
+                    continue
+                
+                # Parse Shape
+                shape_val = config.get('shape')
+                if isinstance(shape_val, str):
+                    if shape_val.lower() == 'balanced':
+                        shape_obj = balanced
+                    elif shape_val.lower() == 'semibalanced': 
+                        shape_obj = semibalanced
+                    else:
+                        shape_obj = Shape(shape_val)
+                else:
+                    shape_obj = shape_val # Assume it's already a Shape object or compatible
+
+                # Parse HCP
+                hcp_val = config.get('hcp')
+                hcp_range = range(0, 41) 
+                if hcp_val:
+                    # hcp_val is (min, max), range needs (min, max+1)
+                    hcp_range = range(hcp_val[0], hcp_val[1] + 1)
+                
+                # Create SmartStack
+                # Usage: SmartStack(shape, evaluator, values)
+                # We use the built-in 'hcp' evaluator from redeal (imported as hcp_eval)
+                ss = SmartStack(shape_obj, hcp_eval, hcp_range)
+                predeal_hands[player] = ss
+
         dealer = Deal.prepare(predeal_hands)
         
         formatted_hands = []
@@ -182,7 +217,17 @@ class BridgeHandGenerator:
         if actual_max_attempts is None:
             # Check if any significant constraints or non-empty predeals are active
             # predeal_hands is guaranteed to be a dict by prior logic
-            is_predeal_effectively_empty = all(str(hand) == "- - - -" for hand in predeal_hands.values())
+            # predeal_hands is guaranteed to be a dict by prior logic
+            # Check if predeal is effectively empty (considering SmartStack objects are not strings)
+            is_predeal_effectively_empty = True
+            for h in predeal_hands.values():
+                if isinstance(h, SmartStack):
+                    is_predeal_effectively_empty = False
+                    break
+                if str(h) != "- - - -":
+                    is_predeal_effectively_empty = False
+                    break
+
             has_any_constraints = bool(suit_holding or hcp or hand_shape or hand_losers or controls or any_shape)
 
             if not has_any_constraints and is_predeal_effectively_empty:

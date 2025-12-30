@@ -353,5 +353,51 @@ class TestBridgeHandGenerator(unittest.TestCase):
             clubs_len = len(south_hand.get('C', []))
             self.assertEqual(diamonds_len + clubs_len, 4, "Remaining cards should sum to 4")
 
+    def test_smart_stack(self):
+        """Test SmartStack usage for efficient generation of specific constraints."""
+        # Request: North is Balanced (4333/4432/5332) and 15-17 HCP.
+        # This is a classic 'Strong No Trump' opening.
+        # Without SmartStack, this requires rejection sampling and can be slow.
+        # With SmartStack, it should be instant.
+        
+        smart_stack = {
+            'N': {
+                'shape': 'balanced',
+                'hcp': (15, 17)
+            }
+        }
+        
+        # We generate a good number of hands to ensure stability and correctness
+        hands_list = self.generator.generate_hands(
+            num_hands=50,
+            smart_stack=smart_stack
+        )
+        
+        self.assertEqual(len(hands_list), 50)
+        
+        # We need a way to check HCP and Shape here to verify correctness.
+        # Ideally we'd use redeal functions, but let's implement basic checks.
+        
+        hcp_values = {'A':4, 'K':3, 'Q':2, 'J':1, 'T':0, '9':0, '8':0,'7':0,'6':0,'5':0,'4':0,'3':0,'2':0}
+        
+        for hands in hands_list:
+            n_hand = hands['N']
+            
+            # 1. Check Shape: Balanced means no singleton/void, at most one doubleton?
+            # redeal 'balanced': 4333, 4432, 5332.
+            # So: min length >= 2, max length <= 5.
+            lengths = [len(n_hand[s]) for s in ['S', 'H', 'D', 'C']]
+            self.assertGreaterEqual(min(lengths), 2)
+            self.assertLessEqual(max(lengths), 5)
+            
+            # 2. Check HCP
+            hcp = 0
+            for suit in ['S', 'H', 'D', 'C']:
+                for card_rank in n_hand[suit]:
+                    hcp += hcp_values[card_rank]
+            
+            self.assertGreaterEqual(hcp, 15)
+            self.assertLessEqual(hcp, 17)
+
 if __name__ == '__main__':
     unittest.main()
