@@ -14,13 +14,21 @@ COPY . .
 # 3. Install redeal
 RUN rm -rf redeal && \
     git clone --recursive https://github.com/anntzer/redeal.git && \
-    find redeal -name "doubledummy.c" && \
+    # Patch setup.py to ensures libdds.so is included in the wheel package
+    sed -i "s/packages=\[\"redeal\"\],/packages=[\"redeal\"], package_data={'redeal': ['*.so']},/" redeal/setup.py && \
     pip install ./redeal
 
-# 4. Find the compiled .so file and link it to 'dds.so'
-# We use a broader find search here to be safe
+# 4. Check for .so file and ensure it is named 'libdds.so' as expected by dds.py
 RUN SO_FILE=$(find /usr/local/lib/python3.11/site-packages/redeal -name "*.so" | head -n 1) && \
-    if [ -n "$SO_FILE" ]; then ln -s $SO_FILE /usr/local/lib/python3.11/site-packages/redeal/dds.so; fi
+    if [ -z "$SO_FILE" ]; then \
+        echo "Error: No .so file found in installed redeal package."; \
+        exit 1; \
+    fi && \
+    echo "Found SO_FILE: $SO_FILE" && \
+    # Create symlink to libdds.so if the found file has a different name
+    if [ "$(basename "$SO_FILE")" != "libdds.so" ]; then \
+        ln -s "$SO_FILE" "$(dirname "$SO_FILE")/libdds.so"; \
+    fi
 
 RUN pip install --no-cache-dir -r requirements.txt
 
