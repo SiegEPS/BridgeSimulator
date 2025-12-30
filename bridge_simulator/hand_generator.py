@@ -1,6 +1,6 @@
 import redeal
 from typing import Dict, List, Tuple
-from redeal.redeal import Hand, Card, Suit, Rank, Deal
+from redeal.redeal import Hand, Card, Suit, Rank, Deal, Shape, balanced, semibalanced, Shape, balanced, semibalanced
 
 # Define the suits in order of importance (from highest to lowest)
 SUITS = ['S', 'H', 'D', 'C']
@@ -18,6 +18,7 @@ class BridgeHandGenerator:
                        hand_shape: Dict[str, List[int]] = None,
                        hand_losers: Dict[str, Tuple[int, int]] = None,
                        controls: Dict[str, Tuple[int, int]] = None,
+                       any_shape: Dict[str, str] = None,
                        predeal: Dict[str, str] = None,
                        max_attempts_param: int = None
                        ) -> List[Dict[str, Dict[str, List[str]]]]:
@@ -38,6 +39,8 @@ class BridgeHandGenerator:
                          Example: {'S': (6, 7)} means South has 6-7 losers.
             controls: Optional. Dictionary specifying controls range (min, max) for a hand.
                       Example: {'E': (4, 6)} means East has 4-6 controls.
+            any_shape: Optional. Dictionary specifying advanced shape constraints.
+                       Example: {'N': 'balanced'} or {'E': '(55)xx'}.
             
         Returns:
             List[Dict]: List of dictionaries containing cards for each player, organized by suit.
@@ -101,6 +104,30 @@ class BridgeHandGenerator:
                     if not (min_controls <= hand.controls <= max_controls):
                         return False
 
+            # Check advanced shape requirements
+            if any_shape:
+                for player, shape_str in any_shape.items():
+                    hand = player_hands.get(player)
+                    if not hand: continue
+                    
+                    try:
+                        # Handle keywords
+                        if shape_str.lower() == 'balanced':
+                            shape_obj = balanced
+                        elif shape_str.lower() == 'semibalanced': 
+                            shape_obj = semibalanced
+                        else:
+                            # Parse string into Shape object
+                            shape_obj = Shape(shape_str)
+                            
+                        # Check if hand matches shape
+                        if not shape_obj(hand):
+                            return False
+                    except Exception:
+                        # If invalid shape string provided, treat as mismatch or log error
+                        # For now, return False to be safe
+                        return False
+
             # For losers checks (currently disabled)
             # if hand_losers:
             #     for player, losers_range in hand_losers.items():
@@ -145,7 +172,7 @@ class BridgeHandGenerator:
             # Check if any significant constraints or non-empty predeals are active
             # predeal_hands is guaranteed to be a dict by prior logic
             is_predeal_effectively_empty = all(str(hand) == "- - - -" for hand in predeal_hands.values())
-            has_any_constraints = bool(suit_holding or hcp or hand_shape or hand_losers or controls)
+            has_any_constraints = bool(suit_holding or hcp or hand_shape or hand_losers or controls or any_shape)
 
             if not has_any_constraints and is_predeal_effectively_empty:
                 # If no constraints and predeal is empty, max_attempts is num_hands (or 1 if num_hands is 0 to allow loop for validation if needed)

@@ -300,5 +300,29 @@ class TestBridgeHandGenerator(unittest.TestCase):
         self.assertEqual(len(hands), 0)
         self.assertIsInstance(hands, list)
 
+    def test_advanced_shape_parameter(self):
+        """
+        Test the any_shape parameter which specifies advanced shape constraints.
+        """
+        # Test 'balanced' keyword
+        hands = self.generator.generate_hands(num_hands=5, any_shape={'N': 'balanced'})
+        self.assertGreater(len(hands), 0, "Should generate balanced hands")
+        for hand_deal in hands:
+            north_hand = hand_deal['N']
+            shape_tuple = tuple(sorted([len(north_hand.get(s, [])) for s in 'SHDC'], reverse=True))
+            # Balanced shapes are 4333, 4432, 5332
+            self.assertIn(shape_tuple, [(4,3,3,3), (4,4,3,2), (5,3,3,2)], 
+                         f"Hand shape {shape_tuple} is not balanced")
+
+        # Test string shape '(55)xx' (at least 5-5 in two suits)
+        # Note: redeal's Shape parser handles '(55)xx'
+        hands = self.generator.generate_hands(num_hands=5, any_shape={'E': '(55)xx'})
+        self.assertGreater(len(hands), 0, "Should generate (55)xx hands")
+        for hand_deal in hands:
+            east_hand = hand_deal['E']
+            lengths = sorted([len(east_hand.get(s, [])) for s in 'SHDC'], reverse=True)
+            self.assertGreaterEqual(lengths[0], 5, "Longest suit should be >= 5")
+            self.assertGreaterEqual(lengths[1], 5, "Second longest suit should be >= 5")
+
 if __name__ == '__main__':
     unittest.main()
