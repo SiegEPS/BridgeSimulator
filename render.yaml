@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: bridge-simulator
+    runtime: docker
+    envVars:
+      - key: PYTHONPATH
+        value: ".:./redeal"
+    # This tells Render specifically to handle submodules correctly
+    repo: https://github.com/YOUR_USERNAME/YOUR_REPO_NAME 
+    branch: main
