@@ -12,23 +12,26 @@ COPY . .
 # 1. Clone redeal
 # 2. Use 'find' to confirm where the actual solver source code ended up
 # 3. Install redeal
+# 1. Clone redeal
+# 2. Build extension in-place to generate libdds.so
+# 3. Install package
+# 4. Copy libdds.so manually to site-packages (bypassing wheel exclusion issues)
 RUN rm -rf redeal && \
     git clone --recursive https://github.com/anntzer/redeal.git && \
-    # Patch setup.py to ensures libdds.so is included in the wheel package
-    sed -i "s/packages=\[\"redeal\"\],/packages=[\"redeal\"], package_data={'redeal': ['*.so']},/" redeal/setup.py && \
-    pip install ./redeal
-
-# 4. Check for .so file and ensure it is named 'libdds.so' as expected by dds.py
-RUN SO_FILE=$(find /usr/local/lib/python3.11/site-packages/redeal -name "*.so" | head -n 1) && \
-    if [ -z "$SO_FILE" ]; then \
-        echo "Error: No .so file found in installed redeal package."; \
-        exit 1; \
-    fi && \
-    echo "Found SO_FILE: $SO_FILE" && \
-    # Create symlink to libdds.so if the found file has a different name
-    if [ "$(basename "$SO_FILE")" != "libdds.so" ]; then \
-        ln -s "$SO_FILE" "$(dirname "$SO_FILE")/libdds.so"; \
-    fi
+    cd redeal && \
+    python3 setup.py build_ext --inplace && \
+    pip install . && \
+    # Find site-packages and copy libdds.so
+    SITE_PACKAGES=$(python3 -c "import site; print(site.getsitepackages()[0])") && \
+    echo "Copying libdds.so to $SITE_PACKAGES/redeal/" && \
+    cp redeal/libdds.so "$SITE_PACKAGES/redeal/" && \
+    # Set correct permissions
+    chmod 755 "$SITE_PACKAGES/redeal/libdds.so" && \
+    # Create symlink just in case (though dds.py looks for libdds.so directly)
+    ln -sf "$SITE_PACKAGES/redeal/libdds.so" "$SITE_PACKAGES/redeal/dds.so" && \
+    # Verify installation works
+    python3 -c "from redeal import dds; dds._check_dll('VerifyBuild'); print('DDS Loaded Successfully')" && \
+    cd .. && rm -rf redeal
 
 RUN pip install --no-cache-dir -r requirements.txt
 
