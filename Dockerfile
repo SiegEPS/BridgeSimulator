@@ -1,6 +1,5 @@
 FROM python:3.11-slim-bookworm
 
-# Install build tools, multi-threading support, AND git
 RUN apt-get update && apt-get install -y \
     build-essential \
     libgomp1 \
@@ -9,21 +8,18 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy your app files
 COPY . .
 
-# 1. Remove the empty placeholder folder Render might have created
-# 2. Clone the redeal repo manually into that spot
-# 3. Enter the dds folder and compile it
+# 1. Use the correct primary URL: https://github.com/anntzer/redeal
+# 2. Use --depth 1 to minimize network issues
+# 3. Compile the solver
 RUN rm -rf redeal && \
-    git clone --recursive https://github.com/overthebridge/redeal.git && \
+    git clone --depth 1 --recursive https://github.com/anntzer/redeal.git && \
     cd redeal/dds/src && \
     make
 
-# Install Python requirements
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Set the path so Python finds the newly cloned redeal
 ENV PYTHONPATH=".:./redeal"
 
 CMD ["gunicorn", "--bind", "0.0.0.0:10000", "app:app"]
