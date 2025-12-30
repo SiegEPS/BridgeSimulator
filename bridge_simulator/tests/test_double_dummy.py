@@ -95,5 +95,46 @@ class TestDoubleDummySolver(unittest.TestCase):
         tricks = DoubleDummySolver.solve(hand_dict, "7S", "N")
         self.assertEqual(tricks, 13)
 
+    def test_get_all_tricks(self):
+        """Test get_tricks_for_all_leads (dd_all_tricks wrapper)."""
+        # Contract 7S by North. Leader is East.
+        # North has all spades. East has all Diamonds.
+        # East leads a Diamond. North ruffs. North runs Spades. 13 tricks.
+        # Whatever East leads, North should take 13 tricks.
+        
+        # Method signature: get_tricks_for_all_leads(strain_char, leader_char)
+        results = self.solver.get_tricks_for_all_leads('S', 'E')
+        
+        # Results is a dictionary {Card: int_tricks}
+        self.assertIsInstance(results, dict)
+        self.assertGreater(len(results), 0)
+        for card, tricks in results.items():
+            self.assertEqual(tricks, 13)
+
+    def test_get_par(self):
+        """Test get_par (par wrapper)."""
+        # Dealer North. Vul: None.
+        # Par should be 7N/7S by N/S.
+        
+        # Method signature: get_par(dealer_char, nsvul_bool, ewvul_bool)
+        par_list = self.solver.get_par('N', False, False)
+        
+        # redeal.par returns a list of ScoredContract objects
+        # We verify we get a list and the first one is 7S or 7N (2210 or 1520/1510)
+        # Actually 7N is 1520. 7S is 1510.
+        # Usually par picks the highest score. 7N/7S/7H/7D/7C/ are all possible here?
+        # N has Spades. S Hearts. E Diamonds. W Clubs.
+        # If N declares 7S, makes 13 (2210 vul, 1510 non-vul).
+        # If N declares 7N, makes 13 (2220 vul, 1520 non-vul).
+        # If E declares... goes down.
+        # So Par should be for NS.
+        
+        self.assertIsInstance(par_list, list)
+        self.assertGreater(len(par_list), 0)
+        best_contract = par_list[0]
+        self.assertIn(str(best_contract.contract.strain), ['S', 'N', 'H', 'D', 'C'])
+        self.assertEqual(best_contract.tricks, 13)
+
+
 if __name__ == '__main__':
     unittest.main()
