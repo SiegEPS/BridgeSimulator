@@ -1,6 +1,6 @@
 import unittest
 from bridge_simulator.hand_generator import BridgeHandGenerator
-from redeal import Suit, Rank, Card, Hand
+from redeal.redeal import Suit, Rank, Card, Hand
 from redeal.redeal import Hand as RedealHand # Not strictly needed due to MockHand
 
 class TestBridgeHandGenerator(unittest.TestCase):

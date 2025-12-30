@@ -1,6 +1,6 @@
 import redeal
 from typing import Dict, List, Tuple
-from redeal.redeal import Hand, Card, Suit, Rank
+from redeal.redeal import Hand, Card, Suit, Rank, Deal
 
 # Define the suits in order of importance (from highest to lowest)
 SUITS = ['S', 'H', 'D', 'C']
@@ -132,7 +132,7 @@ class BridgeHandGenerator:
         for direction, hand_str in predeal_dict.items():
             predeal_hands[direction] = Hand.from_str(hand_str)
         
-        dealer = redeal.Deal.prepare(predeal_hands)
+        dealer = Deal.prepare(predeal_hands)
         
         formatted_hands = []
         generated_count = 0
@@ -177,7 +177,7 @@ class BridgeHandGenerator:
         predeal = {player: "- - - -" for player in ['N', 'E', 'S', 'W']}
         
         # Prepare the dealer with the predeal
-        dealer = redeal.Deal.prepare(predeal)
+        dealer = Deal.prepare(predeal)
         
         # Create a deal with the prepared dealer
         deal = dealer()  # Call the partial function to create the deal
