@@ -27,8 +27,6 @@ RUN rm -rf redeal && \
     cp redeal/libdds.so "$SITE_PACKAGES/redeal/" && \
     # Set correct permissions
     chmod 755 "$SITE_PACKAGES/redeal/libdds.so" && \
-    # Create symlink just in case (though dds.py looks for libdds.so directly)
-    ln -sf "$SITE_PACKAGES/redeal/libdds.so" "$SITE_PACKAGES/redeal/dds.so" && \
     # Verify installation works
     python3 -c "from redeal import dds; dds._check_dll('VerifyBuild'); print('DDS Loaded Successfully')" && \
     cd .. && rm -rf redeal
