@@ -122,7 +122,16 @@ def simulate():
         if len(strategies) == 2:
             s1 = strategies[0].name
             s2 = strategies[1].name
-            result[f"diff_{s1}_minus_{s2}"] = scores[s1] - scores[s2]
+            diff = scores[s1] - scores[s2]
+            result[f"diff_{s1}_minus_{s2}"] = diff
+            
+            # Track winner for win percentage display
+            if diff > 0:
+                result["winner"] = "A_wins"
+            elif diff < 0:
+                result["winner"] = "B_wins"
+            else:
+                result["winner"] = "tie"
             
         return result
 

@@ -331,6 +331,7 @@ function displayResults(data, nameA, nameB) {
     const statusMsg = document.getElementById('statusMsg');
     statusMsg.classList.add('d-none');
     document.getElementById('statsRow').style.display = 'flex';
+    document.getElementById('winPctRow').style.display = 'flex';
 
     // Calculate Stats
     const stats = data.stats;
@@ -344,6 +345,26 @@ function displayResults(data, nameA, nameB) {
     const diffEl = document.getElementById('statDiff');
     diffEl.textContent = (avgDiff > 0 ? "+" : "") + avgDiff.toFixed(2);
     diffEl.style.color = avgDiff > 0 ? "green" : (avgDiff < 0 ? "red" : "black");
+
+    // Calculate Win Percentages
+    const total = data.simulations_run;
+    let aWins = 0, bWins = 0, ties = 0;
+
+    if (stats.winner) {
+        aWins = stats.winner["A_wins"] || 0;
+        bWins = stats.winner["B_wins"] || 0;
+        ties = stats.winner["tie"] || 0;
+    }
+
+    const pctA = total > 0 ? ((aWins / total) * 100).toFixed(1) : 0;
+    const pctB = total > 0 ? ((bWins / total) * 100).toFixed(1) : 0;
+    const pctTie = total > 0 ? ((ties / total) * 100).toFixed(1) : 0;
+
+    document.getElementById('pctA').textContent = pctA + "%";
+    document.getElementById('pctB').textContent = pctB + "%";
+    document.getElementById('pctTie').textContent = pctTie + "%";
+    document.getElementById('labelA').textContent = nameA + " Wins";
+    document.getElementById('labelB').textContent = nameB + " Wins";
 
     // Chart
     const resultScoresA = stats[`${nameA}_score`].mean;
