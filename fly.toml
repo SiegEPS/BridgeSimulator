@@ -1,7 +1,7 @@
 # fly.toml - Fly.io deployment configuration
 # See https://fly.io/docs/reference/configuration/
 
-app = "bridge-simulator"
+app = "app-misty-morning-7441"
 primary_region = "sea"  # Seattle - close to you
 
 [build]
