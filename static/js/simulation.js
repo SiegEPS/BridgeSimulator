@@ -256,11 +256,10 @@ async function runSimulation() {
     statusMsg.textContent = "Running simulation (100 hands)...";
 
     // 1. Gather Generator Params
+    const southHand = document.getElementById('southHand').value.trim();
     const params = {
         num_hands: 100,
-        predeal: {
-            'S': document.getElementById('southHand').value.trim()
-        },
+        predeal: {},
         smart_stack: {
             'N': {
                 'shape': document.getElementById('northShape').value,
@@ -271,6 +270,11 @@ async function runSimulation() {
             }
         }
     };
+
+    // Only add predeal if a hand was specified
+    if (southHand) {
+        params.predeal['S'] = southHand;
+    }
 
     // 2. Build Strategy A (Baseline - Fixed)
     const stratA = {
